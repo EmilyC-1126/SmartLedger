@@ -3,3 +3,4 @@
 .streamlit/
 *.json
 __pycache__/
+*.csv
