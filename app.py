@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from ai_handler import ask_ai_to_categorize
 from data_manager import load_data, save_transaction
+# 加入下面這行：
+from charts import plot_spending_pie_chart, plot_trend_bar_chart
 
 # 1. 設定網頁
 st.set_page_config(page_title="SmartLedger AI", page_icon="💰", layout="centered")
@@ -65,15 +67,36 @@ if st.session_state['current_data']:
             # 重新執行網頁以更新下方的表格
             st.rerun()
 
-# 5. 顯示歷史交易紀錄
-st.divider()
-st.subheader("📊 最近交易紀錄")
 
-# 讀取並顯示 CSV
+# 5. 顯示歷史交易紀錄與圖表
+st.divider()
+
+# 讀取數據
 df = load_data()
+
 if not df.empty:
-    # 按照時間倒序排列 (最新的在上面)
-    df = df.sort_values(by="Date", ascending=False)
-    st.dataframe(df, use_container_width=True)
+    # 建立兩個分頁 (Tab)：一個看表格，一個看圖表
+    tab1, tab2 = st.tabs(["📊 財務報表", "📈 數據分析"])
+    
+    with tab1:
+        st.subheader("最近交易紀錄")
+        # 按照時間倒序排列
+        df_display = df.sort_values(by="Date", ascending=False)
+        st.dataframe(df_display, use_container_width=True)
+
+    with tab2:
+        st.subheader("財務視覺化分析")
+        
+        # 左右兩欄佈局
+        col_left, col_right = st.columns(2)
+        
+        with col_left:
+            st.markdown("### 支出佔比")
+            plot_spending_pie_chart(df)
+            
+        with col_right:
+            st.markdown("### 近期趨勢")
+            plot_trend_bar_chart(df)
+
 else:
     st.info("目前還沒有交易紀錄，快輸入第一筆吧！")
