@@ -1,56 +1,76 @@
-import matplotlib.pyplot as plt
-import pandas as pd
+import plotly.express as px
 import streamlit as st
+import pandas as pd
 
 def plot_spending_pie_chart(df):
-    """繪製支出分類圓餅圖"""
+    """繪製支出分類圓餅圖 (使用 Plotly)"""
     if df.empty:
         return
 
-    # 1. 過濾掉 "Income" (收入)，我們只看支出
+    # 1. 篩選：只看支出 (Category 不等於 Income)
+    # 我們不把 Income 放進圓餅圖，以免比例失衡
     expenses = df[df['Category'] != 'Income']
     
     if expenses.empty:
-        st.info("目前沒有支出數據可供分析。")
+        st.info("目前只有收入記錄，還沒有支出數據，所以圓餅圖暫時空白。")
         return
 
-    # 2. 依照 Category 分組並加總 Amount
-    category_sum = expenses.groupby('Category')['Amount'].sum()
-
-    # 3. 設定畫布大小
-    fig, ax = plt.subplots(figsize=(6, 6))
-    
-    # 4. 繪製圓餅圖
-    # autopct='%1.1f%%' 代表顯示小數點後一位的百分比
-    # startangle=90 代表從 12 點鐘方向開始畫
-    # colors 使用 pastel 色系比較柔和專業
-    ax.pie(
-        category_sum, 
-        labels=category_sum.index, 
-        autopct='%1.1f%%', 
-        startangle=90,
-        colors=plt.cm.Pastel1.colors
+    # 2. 畫圖 (Plotly 自動處理中文)
+    fig = px.pie(
+        expenses, 
+        values='Amount', 
+        names='Category',
+        title='💸 支出分佈 (按主分類)',
+        hole=0.4, # 變成甜甜圈圖，比較型
+        color_discrete_sequence=px.colors.qualitative.Pastel
     )
     
-    ax.axis('equal')  # 確保圓餅是圓的
-    ax.set_title("支出分佈 (By Category)")
-
-    # 5. 在 Streamlit 顯示圖表
-    st.pyplot(fig)
+    # 設定滑鼠懸停顯示格式
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    
+    # 3. 顯示
+    st.plotly_chart(fig, use_container_width=True)
 
 def plot_trend_bar_chart(df):
-    """繪製近期交易長條圖"""
+    """繪製近期交易長條圖 (使用 Plotly)"""
     if df.empty:
         return
 
-    # 只取最後 10 筆交易
-    recent_df = df.tail(10)
+    # 為了讓圖表不至於太擠，我們只取最近 20 筆
+    recent_df = df.tail(20)
 
-    # 簡單的長條圖
-    st.bar_chart(
-        data=recent_df,
-        x="Date",
-        y="Amount",
-        color="Category", # 根據分類顯示不同顏色
-        use_container_width=True
+    # 畫長條圖
+    fig = px.bar(
+        recent_df, 
+        x='Date', 
+        y='Amount',
+        color='Category', # 不同分類不同顏色
+        title='📅 近期交易趨勢 (包含收入與支出)',
+        labels={'Amount': '金額', 'Date': '日期', 'Category': '分類'},
+        text_auto=True # 自動在柱子上顯示數字
     )
+    
+    # 讓 X 軸日期顯示得簡潔點
+    fig.update_layout(xaxis_title=None)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_summary_metrics(df):
+    """額外功能：顯示總收入與總支出的數字卡片"""
+    if df.empty:
+        return
+        
+    # 計算總收入
+    total_income = df[df['Category'] == 'Income']['Amount'].sum()
+    
+    # 計算總支出
+    total_expense = df[df['Category'] != 'Income']['Amount'].sum()
+    
+    # 計算結餘
+    balance = total_income - total_expense
+    
+    # 顯示漂亮的三欄指標
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 總收入", f"${total_income:,.0f}", delta_color="normal")
+    col2.metric("💸 總支出", f"${total_expense:,.0f}", delta_color="inverse")
+    col3.metric("pig_nose 結餘", f"${balance:,.0f}")

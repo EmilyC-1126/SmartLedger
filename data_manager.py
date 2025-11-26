@@ -1,22 +1,43 @@
 import pandas as pd
-import os
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
+import streamlit as st
 
-CSV_FILE = "ledger_data.csv"
+COLUMNS = ["Date", "Amount", "Currency", "Category", "Sub_Category", "Description", "Payer"]
+
+def get_connection():
+    return st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    """讀取現有的記帳數據，如果檔案不存在則建立一個空的"""
-    if os.path.exists(CSV_FILE):
-        return pd.read_csv(CSV_FILE)
-    else:
-        # 定義 Excel 表格的欄位名稱
-        columns = ["Date", "Amount", "Currency", "Category", "Sub_Category", "Description", "Payer"]
-        return pd.DataFrame(columns=columns)
+    """讀取數據：現在會使用預設快取，速度會變很快"""
+    conn = get_connection()
+    try:
+        # 修改 1: 移除 ttl=0，使用預設快取 (Streamlit 預設 cache 10分鐘)
+        df = conn.read()
+        
+        if df.empty or len(df.columns) == 0:
+            return pd.DataFrame(columns=COLUMNS)
+        
+        for col in COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+                
+        df = df.dropna(how="all")
+        
+        if 'Amount' in df.columns:
+            # 確保金額格式正確
+            df['Amount'] = df['Amount'].astype(str).str.replace(',', '')
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+            
+        return df
+        
+    except Exception as e:
+        print(f"讀取錯誤: {e}")
+        return pd.DataFrame(columns=COLUMNS)
 
 def save_transaction(data):
-    """將單筆交易存入 CSV 檔案"""
+    """存入數據：只有在存檔時才會有等待時間"""
     
-    # 1. 準備要寫入的一行資料
     new_row = {
         "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Amount": data.get("amount"),
@@ -27,14 +48,20 @@ def save_transaction(data):
         "Payer": data.get("payer")
     }
     
-    # 2. 載入舊資料
-    df = load_data()
+    conn = get_connection()
     
-    # 3. 加入新資料 (使用 concat 代替 append，因為 append 在新版 pandas 已被移除)
+    # 這裡我們需要讀最新的數據來做 Append，所以這裡單獨加 ttl=0 比較保險
+    # 但為了簡單，直接讀 cache 也可以，因為我們會 overwrite update
+    existing_data = load_data()
+    
     new_df = pd.DataFrame([new_row])
-    df = pd.concat([df, new_df], ignore_index=True)
+    updated_df = pd.concat([existing_data, new_df], ignore_index=True)
     
-    # 4. 存回檔案 (index=False 代表不要儲存 0,1,2... 那些行號)
-    df.to_csv(CSV_FILE, index=False)
+    # 寫入 Google Sheets (這一步最花時間，是正常的)
+    conn.update(data=updated_df)
+    
+    # 修改 2: 關鍵！寫入成功後，立刻清除快取
+    # 這樣下一次 load_data() 執行時，因為沒有快取了，就會被迫去 Google 拿最新的
+    st.cache_data.clear()
     
     return True

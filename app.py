@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from ai_handler import ask_ai_to_categorize
 from data_manager import load_data, save_transaction
-# 加入下面這行：
+# 記得要 import 圖表功能
 from charts import plot_spending_pie_chart, plot_trend_bar_chart
 
 # 1. 設定網頁
@@ -10,7 +10,6 @@ st.set_page_config(page_title="SmartLedger AI", page_icon="💰", layout="center
 st.title("🏡 SmartLedger 家庭智能記帳")
 
 # --- Session State 初始化 ---
-# 用來暫存 AI 分析出來的結果，防止按鈕刷新後消失
 if 'current_data' not in st.session_state:
     st.session_state['current_data'] = None
 
@@ -31,7 +30,6 @@ if st.button("✨ AI 智能分析", type="primary"):
             ai_result = ask_ai_to_categorize(user_input)
             
             if ai_result:
-                # 處理 List 情況，取第一筆
                 if isinstance(ai_result, list):
                     st.session_state['current_data'] = ai_result[0]
                 else:
@@ -40,7 +38,6 @@ if st.button("✨ AI 智能分析", type="primary"):
                 st.error("AI 分析失敗，請重試。")
 
 # 4. 顯示分析結果與儲存按鈕
-# 只有當 session_state 裡面有資料時才顯示這塊
 if st.session_state['current_data']:
     data = st.session_state['current_data']
     
@@ -59,35 +56,32 @@ if st.session_state['current_data']:
         
         # --- 儲存按鈕 ---
         if st.button("✅ 確認並儲存"):
-            save_transaction(data)
-            st.success("🎉 交易已儲存！")
+            with st.spinner("正在寫入 Google Sheets..."):
+                save_transaction(data)
             
-            # 清空暫存，準備下一筆
+            st.success("🎉 交易已儲存！")
             st.session_state['current_data'] = None
-            # 重新執行網頁以更新下方的表格
+            
+            # 強制刷新頁面，讓下方的表格和圖表即時更新
             st.rerun()
-
 
 # 5. 顯示歷史交易紀錄與圖表
 st.divider()
 
-# 讀取數據
+# 每次都重新讀取最新數據
 df = load_data()
 
 if not df.empty:
-    # 建立兩個分頁 (Tab)：一個看表格，一個看圖表
     tab1, tab2 = st.tabs(["📊 財務報表", "📈 數據分析"])
     
     with tab1:
         st.subheader("最近交易紀錄")
-        # 按照時間倒序排列
         df_display = df.sort_values(by="Date", ascending=False)
         st.dataframe(df_display, use_container_width=True)
 
     with tab2:
         st.subheader("財務視覺化分析")
         
-        # 左右兩欄佈局
         col_left, col_right = st.columns(2)
         
         with col_left:
